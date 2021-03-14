@@ -1,0 +1,10 @@
+flags:
+  # demo:
+  - match:
+      - park
+      - found
+    flag: Major Minor Park
+  - match:
+      - park
+      - lost
+    flag: Major Mark Park

@@ -1,0 +1,11 @@
+CTFD:
+  URL: "https://demo.ctfd.io"
+  TOKEN: "demotokenfoobar"
+
+USER_AGENT: "contact details here"
+FAILED_FILE: "./fails.yaml"
+
+DISCORD_HOOK:
+  URL: "foobar"
+  PING: "<@1234567>"
+
