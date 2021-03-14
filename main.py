@@ -26,21 +26,35 @@ class CtfFlagSpammer():
     def normalise_chall_name(self, chall_obj):
         return (chall_obj['category'] + ' ' + chall_obj['name']).lower()
 
-    def exec(self):
+    def exec(self, count=None):
+        challs_response = self.requests.get(self.base_url + "/api/v1/challenges", headers=self._request_headers())
+
+        if count is not None and count == len(challs_response.json()['data']):
+            print('Did not found any new challenges')
+            return
+
         solves_response = self.requests.get(self.base_url + "/api/v1/users/me/solves", headers=self._request_headers())
         solved = []
         for solve in solves_response.json()['data']:
             solved.append(self.normalise_chall_name(solve['challenge']))
-
-        challs_response = self.requests.get(self.base_url + "/api/v1/challenges", headers=self._request_headers())
         print('Found', len(solved), 'solves for', len(challs_response.json()['data']), 'challenges')
+
+        tryagain = False
+
         for chall in challs_response.json()['data']:
             chall_name = self.normalise_chall_name(chall)
             if chall_name in self.fails:
                 continue
             if chall_name in solved:
                 continue
-            self.try_solve(chall, chall_name)
+            result = self.try_solve(chall, chall_name)
+
+            if result:
+                tryagain = True
+
+        if tryagain:
+            print('Checking if any more challenges were unlocked')
+            self.exec(len(challs_response.json()['data']))
 
     def try_solve(self, chall, chall_name):
         for possible in self.flags:
@@ -62,8 +76,15 @@ class CtfFlagSpammer():
                                                      },
                                                      headers=self._request_headers())
             ok = submission_response.json()['data']['status'] == 'correct'
+
+            requests.post(self.config['DISCORD_HOOK']['URL'], json={
+                "content": self.config['DISCORD_HOOK']['PING'] + ': ' + ('solved' if ok else '**failed**') + ' ' + chall_name,
+                "username": 'ctf-flag-spammer'
+            })
+
             if ok:
                 print("OK")
+                return True
             else:
                 print('failed', submission_response.status_code, submission_response.text)
                 self.fails.append(chall_name)
@@ -72,12 +93,9 @@ class CtfFlagSpammer():
                     with open(self.fails_file, 'w') as f:
                         f.write(yaml.safe_dump(self.fails))
 
-            requests.post(self.config['DISCORD_HOOK']['URL'], json={
-                "content": self.config['DISCORD_HOOK']['PING'] + ': ' + ('solved' if ok else '**failed**') + ' ' + chall_name,
-                "username": 'ctf-flag-spammer'
-            })
-            break
+            return False
         print('Did not find a flag for', chall_name)
+        return False
 
 
 if __name__ == '__main__':
