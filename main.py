@@ -104,7 +104,7 @@ class CtfFlagSpammer():
                 logger.info("Flag submitted successfully")
                 return True
             else:
-                logger.warning('failed to submit flag;  %s %s', submission_response.status_code, submission_response.text)
+                logger.warning('failed to submit flag; %s %s', submission_response.status_code, submission_response.text)
                 self.fails.append(chall_name)
 
                 try:
@@ -114,7 +114,7 @@ class CtfFlagSpammer():
                 except:
                     logger.exception('Failed to write fail file')
             return False
-        print('Did not find a flag for', chall_name)
+        logger.info('Did not find a flag for %s', chall_name)
         return False
 
 
