@@ -1,7 +1,19 @@
 from argparse import ArgumentParser
+import logging
 import os.path
 import requests
 import yaml
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(name)s %(levelname)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logging.captureWarnings(True)
+
+logger = logging.getLogger('ctf-flag-spammer')
+logger.setLevel(logging.DEBUG)
 
 
 class CtfFlagSpammer():
@@ -18,9 +30,9 @@ class CtfFlagSpammer():
 
     def _request_headers(self):
         return {
-            "Authorization": "Token " + config['CTFD']['TOKEN'],
+            "Authorization": "Token " + self.config['CTFD']['TOKEN'],
             "Content-Type": "application/json",
-            "User-Agent": "taavi's auto submit bot, please ping taavi#0036 if it's causing problems"
+            "User-Agent": self.config['USER_AGENT']
         }
 
     def normalise_chall_name(self, chall_obj):
@@ -28,16 +40,19 @@ class CtfFlagSpammer():
 
     def exec(self, count=None):
         challs_response = self.requests.get(self.base_url + "/api/v1/challenges", headers=self._request_headers())
+        challs_response.raise_for_status()
 
         if count is not None and count == len(challs_response.json()['data']):
-            print('Did not found any new challenges')
+            logger.info('Did not found any new challenges')
             return
 
         solves_response = self.requests.get(self.base_url + "/api/v1/users/me/solves", headers=self._request_headers())
+        solves_response.raise_for_status()
+
         solved = []
         for solve in solves_response.json()['data']:
             solved.append(self.normalise_chall_name(solve['challenge']))
-        print('Found', len(solved), 'solves for', len(challs_response.json()['data']), 'challenges')
+        logger.info('Found %s solves for %s challenges', len(solved), len(challs_response.json()['data']))
 
         tryagain = False
 
@@ -53,7 +68,7 @@ class CtfFlagSpammer():
                 tryagain = True
 
         if tryagain:
-            print('Checking if any more challenges were unlocked')
+            logger.info('Checking if any more challenges were unlocked')
             self.exec(len(challs_response.json()['data']))
 
     def try_solve(self, chall, chall_name):
@@ -64,11 +79,11 @@ class CtfFlagSpammer():
                 if keyword not in chall_name:
                     matched = False
                     break
-                print('Keyword', keyword, 'matched part of name', chall_name)
+                logger.debug('Keyword %s matched part of name %s', keyword, chall_name)
             if not matched:
                 continue
 
-            print("Attempting to submit flag", possible['flag'], "to challenge", chall_name, chall['id'])
+            logger.info("Attempting to submit flag %s to challenge %s", possible['flag'], chall_name)
             submission_response = self.requests.post(self.base_url + "/api/v1/challenges/attempt",
                                                      json={
                                                          "challenge_id": chall['id'],
@@ -77,28 +92,33 @@ class CtfFlagSpammer():
                                                      headers=self._request_headers())
             ok = submission_response.json()['data']['status'] == 'correct'
 
-            requests.post(self.config['DISCORD_HOOK']['URL'], json={
-                "content": self.config['DISCORD_HOOK']['PING'] + ': ' + ('solved' if ok else '**failed**') + ' ' + chall_name,
-                "username": 'ctf-flag-spammer'
-            })
+            try:
+                requests.post(self.config['DISCORD_HOOK']['URL'], json={
+                    "content": self.config['DISCORD_HOOK']['PING'] + ': ' + ('solved' if ok else '**failed**') + ' ' + chall_name,
+                    "username": 'ctf-flag-spammer'
+                })
+            except:
+                logger.exception('Failed to send Discord notification')
 
             if ok:
-                print("OK")
+                logger.info("Flag submitted successfully")
                 return True
             else:
-                print('failed', submission_response.status_code, submission_response.text)
+                logger.warning('failed to submit flag;  %s %s', submission_response.status_code, submission_response.text)
                 self.fails.append(chall_name)
 
-                if len(self.fails_file) > 0:
-                    with open(self.fails_file, 'w') as f:
-                        f.write(yaml.safe_dump(self.fails))
-
+                try:
+                    if len(self.fails_file) > 0:
+                        with open(self.fails_file, 'w') as f:
+                            f.write(yaml.safe_dump(self.fails))
+                except:
+                    logger.exception('Failed to write fail file')
             return False
         print('Did not find a flag for', chall_name)
         return False
 
 
-if __name__ == '__main__':
+def main():
     parser = ArgumentParser(description="ctf-flag-spammer")
     parser.add_argument("-c", "--config",
                         default=os.path.join(os.path.dirname(__file__), 'config.yaml'),
@@ -113,3 +133,7 @@ if __name__ == '__main__':
 
     spammer = CtfFlagSpammer(config, flags)
     spammer.exec()
+
+
+if __name__ == '__main__':
+    main()
