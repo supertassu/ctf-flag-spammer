@@ -76,7 +76,7 @@ class CtfFlagSpammer():
             # loops two layers deep, can't break
             matched = True
             for keyword in possible['match']:
-                if keyword not in chall_name:
+                if str(keyword) not in chall_name:
                     matched = False
                     break
                 logger.debug('Keyword %s matched part of name %s', keyword, chall_name)
